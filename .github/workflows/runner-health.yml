@@ -1,0 +1,11 @@
+name: Temporary runner diagnostic
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test GitHub hosted runner
+        run: echo "GitHub-hosted runner started successfully"
