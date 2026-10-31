@@ -9,7 +9,7 @@ permissions:
 jobs:
   unsigned-ipa:
     name: Build Habitica unsigned IPA
-    runs-on: xcode-27
+    runs-on: macos-latest
     timeout-minutes: 120
     steps:
       - name: Checkout source
