@@ -1,0 +1,78 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unsigned-ipa:
+    name: Build Habitica unsigned IPA
+    runs-on: xcode-27
+    timeout-minutes: 120
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Prepare local configuration (no production secrets)
+        run: |
+          cp sample.debug.xcconfig debug.xcconfig
+          cp secrets.yml.example secrets.yml
+          brew install swiftgen
+          swiftgen config run
+
+      - name: Show build environment
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build iPhone and iPad application without signing
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -workspace Habitica.xcworkspace \
+            -scheme Habitica \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -sdk iphoneos \
+            -derivedDataPath "$RUNNER_TEMP/HabiticaDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build 2>&1 | tee "$RUNNER_TEMP/habitica-build.log"
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/HabiticaDerivedData/Build/Products/Debug-iphoneos/Habitica.app"
+          if [[ ! -d "$APP" ]]; then
+            echo "Expected app not found: $APP" >&2
+            find "$RUNNER_TEMP/HabiticaDerivedData/Build/Products" -maxdepth 3 -name '*.app' -print
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/HabiticaIPA/Payload"
+          ditto "$APP" "$RUNNER_TEMP/HabiticaIPA/Payload/Habitica.app"
+          (
+            cd "$RUNNER_TEMP/HabiticaIPA"
+            zip -qry "$GITHUB_WORKSPACE/Habitica-unsigned.ipa" Payload
+          )
+          unzip -t "$GITHUB_WORKSPACE/Habitica-unsigned.ipa" | tail -n 1
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Habitica-unsigned-IPA
+          path: Habitica-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Habitica-build-log
+          path: ${{ runner.temp }}/habitica-build.log
+          if-no-files-found: ignore
+          retention-days: 7
